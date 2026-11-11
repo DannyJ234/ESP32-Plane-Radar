@@ -15,6 +15,7 @@
 #include "services/radar_location.h"
 #include "ui/aircraft_names.h"
 #include "ui/marquee.h"
+#include "ui/radar_map.h"
 #include "ui/radar_range.h"
 #include "ui/radar_theme.h"
 #include "ui/runway_overlay.h"
@@ -34,6 +35,7 @@ uint16_t kColorRunway = 0x4D5F;
 uint16_t kColorRunwayLabel = 0x7DFF;
 uint16_t kColorOverhead = 0x801F;
 uint16_t kColorTagAirline = 0xFFFF;
+uint16_t kColorFavourite = 0xFE60;
 
 }  // namespace radar
 
@@ -209,6 +211,13 @@ void initPalette() {
     radar::kColorOverhead =
         tft.color565(radar::kOverheadR, radar::kOverheadG, radar::kOverheadB);
   }
+  if (config::kDisplayRgbOrder) {
+    radar::kColorFavourite =
+        tft.color565(radar::kFavouriteB, radar::kFavouriteG, radar::kFavouriteR);
+  } else {
+    radar::kColorFavourite =
+        tft.color565(radar::kFavouriteR, radar::kFavouriteG, radar::kFavouriteB);
+  }
   radar::kColorTagAirline = tft.color565(radar::kTagAirlineR, radar::kTagAirlineG,
                                          radar::kTagAirlineB);
 }
@@ -311,7 +320,12 @@ bool beyondRingEdgeDotFromLatLon(float lat, float lon, int* out_x, int* out_y) {
   return true;
 }
 
-void drawBeyondRingDot(int x, int y) {
+void drawBeyondRingDot(int x, int y, bool favourite = false) {
+  if (favourite) {
+    s_draw->fillSmoothCircle(x, y, radar::kBeyondRingDotRadiusPx + 2,
+                             radar::kColorFavourite);
+    return;
+  }
   s_draw->fillSmoothCircle(x, y, radar::kBeyondRingDotRadiusPx,
                            radar::kColorAircraft);
 }
@@ -429,7 +443,7 @@ void applyTagStyle() {
 }
 
 void drawAircraftTag(int x, int y, const services::adsb::Aircraft& plane,
-                     bool flash_purple) {
+                     bool flash_purple, bool favourite = false) {
   initTagLabelMetrics();
   applyTagStyle();
 
@@ -448,9 +462,11 @@ void drawAircraftTag(int x, int y, const services::adsb::Aircraft& plane,
     lines[n].color = color;
     ++n;
   };
-  add(plane.callsign, flash_purple ? radar::kColorOverhead : radar::kColorLabel);
+  add(plane.callsign, flash_purple ? radar::kColorOverhead
+                                   : (favourite ? radar::kColorFavourite : radar::kColorLabel));
   add(aircraftnames::airlineFromCallsign(plane.callsign), radar::kColorTagAirline);
-  add(aircraftnames::modelFromType(plane.type), radar::kColorTagType);
+  add(aircraftnames::modelFromType(plane.type),
+      favourite ? radar::kColorFavourite : radar::kColorTagType);
   add(plane.alt, radar::kColorTagAltitude);
   if (n == 0) {
     return;
@@ -496,12 +512,14 @@ struct AircraftDrawItem {
   int y = 0;
   int dist_sq = 0;
   bool overhead = false;
+  bool favourite = false;
 };
 
 struct BeyondDotDrawItem {
   int x = 0;
   int y = 0;
   int dist_sq = 0;
+  bool favourite = false;
 };
 
 void sortDrawItemsFarFirst(AircraftDrawItem* items, size_t count) {
@@ -526,6 +544,26 @@ void sortBeyondDotsFarFirst(BeyondDotDrawItem* items, size_t count) {
     }
     items[j] = key;
   }
+}
+
+// Stable "favourites last" without std::stable_partition: that allocates a
+// temporary buffer from the heap on every frame, which fragments memory and
+// can starve the HTTPS connection of the ADS-B fetch.
+template <typename T>
+void moveFavouritesLast(T* items, size_t count) {
+  size_t w = 0;
+  for (size_t r = 0; r < count; ++r) {
+    if (!items[r].favourite) {
+      if (r != w) {
+        std::rotate(items + w, items + r, items + r + 1);
+      }
+      ++w;
+    }
+  }
+}
+
+bool isFavourite(const services::adsb::Aircraft& plane) {
+  return plane.type[0] != '\0' && strcmp(plane.type, radar::kFavouriteType) == 0;
 }
 
 bool s_flash_on = false;  // flips every 250 ms -> about 2 flashes per second
@@ -569,6 +607,7 @@ void drawAircraft() {
       items[draw_count].y = y;
       items[draw_count].dist_sq = distSqFromCenter(x, y);
       items[draw_count].overhead = dist_km <= radar::kOverheadDistanceKm;
+      items[draw_count].favourite = isFavourite(planes[i]);
       ++draw_count;
       continue;
     }
@@ -581,15 +620,19 @@ void drawAircraft() {
     dots[dot_count].x = dot_x;
     dots[dot_count].y = dot_y;
     dots[dot_count].dist_sq = distSqFromCenter(dot_x, dot_y);
+    dots[dot_count].favourite = isFavourite(planes[i]);
     ++dot_count;
   }
 
   sortBeyondDotsFarFirst(dots, dot_count);
+  // Favourites last, so they sit on top of everything else.
+  moveFavouritesLast(dots, dot_count);
   for (size_t d = 0; d < dot_count; ++d) {
-    drawBeyondRingDot(dots[d].x, dots[d].y);
+    drawBeyondRingDot(dots[d].x, dots[d].y, dots[d].favourite);
   }
 
   sortDrawItemsFarFirst(items, draw_count);
+  moveFavouritesLast(items, draw_count);
   for (size_t d = 0; d < draw_count; ++d) {
     const size_t i = items[d].index;
     const int x = items[d].x;
@@ -598,12 +641,18 @@ void drawAircraft() {
     drawSpeedVector(x, y, planes[i].nose_deg, planes[i].track_deg,
                     planes[i].gs_knots, radar::kColorTrackVector);
     drawHeadingTriangle(x, y, planes[i].nose_deg,
-                        purple ? radar::kColorOverhead : radar::kColorAircraft);
+                        purple ? radar::kColorOverhead
+                               : (items[d].favourite ? radar::kColorFavourite
+                                                     : radar::kColorAircraft));
+    if (items[d].favourite) {
+      s_draw->drawCircle(x, y, 9, radar::kColorFavourite);
+      s_draw->drawCircle(x, y, 10, radar::kColorFavourite);
+    }
   }
   for (size_t d = 0; d < draw_count; ++d) {
     const size_t i = items[d].index;
     drawAircraftTag(items[d].x, items[d].y, planes[i],
-                    items[d].overhead && s_flash_on);
+                    items[d].overhead && s_flash_on, items[d].favourite);
   }
 }
 
@@ -710,6 +759,7 @@ void drawStaticGrid(Gfx& gfx) {
   const int grid_r = radar::kGridOuterRadius;
 
   gfx.fillScreen(radar::kColorBackground);
+  radarmap::draw(gfx);  // terrain, water and parks (optional)
   drawRings(cx, cy, grid_r);
   drawCrosshairs(cx, cy, grid_r, radar::kColorGrid);
   initPalette();

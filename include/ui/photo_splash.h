@@ -9,4 +9,10 @@ namespace ui {
  */
 void photoSplashShow();
 
+/**
+ * Play the photos over whatever is on screen, `hold_ms` each, then close to
+ * black. Blocks until finished; the caller must redraw the radar afterwards.
+ */
+void photoSlideshow(unsigned long hold_ms);
+
 }  // namespace ui

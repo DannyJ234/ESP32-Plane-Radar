@@ -4,7 +4,7 @@ namespace ui::photosplash {
 
 /** Text curved along the top edge of EVERY photo (same style as the rolling
  *  messages). Use "" for no text. Plain letters/numbers/punctuation only. */
-inline constexpr char kCaption[] = "I Love You ~ Danny";
+inline constexpr char kCaption[] = "I Love You Stinky";
 
 /** How long each photo stays on screen (ms), not counting the opening wipe. */
 inline constexpr unsigned long kHoldMs = 1800;

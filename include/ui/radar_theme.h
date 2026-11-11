@@ -103,6 +103,12 @@ constexpr uint8_t kOverheadR = 170;
 constexpr uint8_t kOverheadG = 0;
 constexpr uint8_t kOverheadB = 255;
 constexpr float kOverheadDistanceKm = 2.0f;
+/** Favourite aircraft type: gold, ringed and drawn on top of everything else.
+ *  Use the ICAO type code (A388 = Airbus A380-800; B748 = 747-8, B77W = 777-300ER). */
+inline constexpr char kFavouriteType[] = "A388";
+constexpr uint8_t kFavouriteR = 255;
+constexpr uint8_t kFavouriteG = 200;
+constexpr uint8_t kFavouriteB = 0;
 /** Airline line in the aircraft tag. */
 constexpr uint8_t kTagAirlineR = 200;
 constexpr uint8_t kTagAirlineG = 200;
@@ -120,5 +126,6 @@ extern uint16_t kColorRunway;
 extern uint16_t kColorRunwayLabel;
 extern uint16_t kColorOverhead;
 extern uint16_t kColorTagAirline;
+extern uint16_t kColorFavourite;
 
 }  // namespace ui::radar

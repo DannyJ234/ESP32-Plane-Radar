@@ -10,6 +10,7 @@
 #include "services/adsb_client.h"
 #include "services/radar_location.h"
 #include "services/wifi_setup.h"
+#include "ui/hourly_photos.h"
 #include "ui/marquee.h"
 #include "ui/photo_splash.h"
 #include "ui/marquee_config.h"
@@ -78,6 +79,7 @@ void setup() {
   bootButtonInit();
   displayInit();
   ui::photoSplashShow();
+  ui::hourlyPhotosBegin();
   if (wifiShowsSetupScreenOnBoot()) {
     statusScreenPortal();
   }
@@ -121,6 +123,11 @@ void loop() {
     g_wifi_down_since = 0;
     if (!g_radar_visible) {
       showRadarIfConnected();
+    } else if (ui::hourlyPhotosDue()) {
+      // The hour just changed: play the photos, then go back to the radar.
+      ui::hourlyPhotosRun();
+      ui::radarDisplayDraw();
+      g_last_redraw_ms = millis();
     } else if (millis() - g_last_redraw_ms >=
                (ui::marqueeActive() ? ui::marquee::kRedrawIntervalMs
                                     : config::kRadarRedrawIntervalMs)) {

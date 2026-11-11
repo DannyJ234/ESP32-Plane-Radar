@@ -145,21 +145,30 @@ void closeToBlack() {
 
 }  // namespace
 
-void photoSplashShow() {
+static void runSlideshow(unsigned long hold_ms, unsigned long last_hold_ms) {
   using namespace photosplash;
-  tft.fillScreen(tft.color565(0, 0, 0));
   s_have_caption = buildCaption();
 
   for (size_t i = 0; i < kSplashPhotoCount; ++i) {
     wipeInPhoto(i);
     drawCaption();
-    delay(i + 1 == kSplashPhotoCount ? kLastHoldMs : kHoldMs);
+    delay(i + 1 == kSplashPhotoCount ? last_hold_ms : hold_ms);
   }
   closeToBlack();
 
   s_text.deleteSprite();
   s_buf = nullptr;
   tft.setTextDatum(textdatum_t::top_left);
+}
+
+void photoSplashShow() {
+  using namespace photosplash;
+  tft.fillScreen(tft.color565(0, 0, 0));
+  runSlideshow(kHoldMs, kLastHoldMs);
+}
+
+void photoSlideshow(unsigned long hold_ms) {
+  runSlideshow(hold_ms, hold_ms);
 }
 
 }  // namespace ui
